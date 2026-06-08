@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma LUCIDA</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        /* Barra de índice izquierda */
+        .sidebar {
+            width: 300px;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 25px 20px;
+            overflow-y: auto;
+            border-right: 1px solid #1e293b;
+        }
+        .sidebar h2 {
+            font-size: 1.25rem;
+            margin-top: 0;
+            margin-bottom: 25px;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 15px;
+        }
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .sidebar li {
+            margin-bottom: 8px;
+        }
+        .sidebar a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.95rem;
+            display: block;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .sidebar a:hover {
+            background-color: #1e293b;
+            color: #38bdf8;
+            padding-left: 18px;
+        }
+        .sidebar .sub-item {
+            padding-left: 20px;
+            font-size: 0.85rem;
+        }
+        /* Contenedor de contenido de la derecha */
+        .content {
+            margin-left: 300px;
+            padding: 50px;
+            max-width: 1000px;
+            width: calc(100% - 300px);
+            background-color: #ffffff;
+            min-height: 100vh;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.02);
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+        /* Estilos del contenido */
+        h1 {
+            font-size: 2.5rem;
+            color: #0f172a;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            color: #64748b;
+            margin-bottom: 40px;
+        }
+        h2 {
+            font-size: 1.75rem;
+            color: #0f172a;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+            margin-top: 60px;
+        }
+        h3 {
+            font-size: 1.4rem;
+            color: #1e293b;
+            margin-top: 40px;
+        }
+        h4 {
+            font-size: 1.1rem;
+            color: #475569;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        p {
+            line-height: 1.7;
+            margin-bottom: 20px;
+            font-size: 1.05rem;
+        }
+        ul {
+            padding-left: 25px;
+            margin-bottom: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+            line-height: 1.6;
+            font-size: 1.05rem;
+        }
+        blockquote {
+            background-color: #f1f5f9;
+            border-left: 4px solid #64748b;
+            padding: 15px 20px;
+            margin: 30px 0;
+            font-style: italic;
+            border-radius: 0 8px 8px 0;
+        }
+        iframe {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            margin: 30px 0;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        /* Contenedor para los GIFs demostrativos */
+        .gif-container {
+            background-color: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+            text-align: center;
+        }
+        .gif-container p {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+        .gif-placeholder {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        /* Fórmulas matemáticas */
+        .formula {
+            display: block;
+            background-color: #f1f5f9;
+            padding: 15px;
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            margin: 20px 0;
+            color: #0f172a;
+        }
+        .inline-formula {
+            background-color: #f1f5f9;
+            padding: 2px 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BARRA DE ÍNDICE IZQUIERDA -->
+    <nav class="sidebar">
+        <h2>Índice de Navegación</h2>
+        <ul>
+            <li><a href="#resumen">¿Qué hacemos?</a></li>
+            <li><a href="#aplicacion">Aplicación Interactiva</a></li>
+            <li><a href="#sec-1">1. Introducción y Propósito</a></li>
+            <li><a href="#sec-2">2. Estructura Principal</a></li>
+            <li><a class="sub-item" href="#sec-2-1">2.1 Visor Cartográfico</a></li>
+            <li><a class="sub-item" href="#sec-2-2">2.2 Panel de Control</a></li>
+            <li><a href="#sec-3">3. Capas y Variables</a></li>
+            <li><a class="sub-item" href="#sec-3-1">3.1 Análisis Espacial</a></li>
+            <li><a class="sub-item" href="#sec-3-2">3.2 Variables Físicas/Sociales</a></li>
+            <li><a class="sub-item" href="#sec-3-3">3.3 Fundamentos Cálculos</a></li>
+            <li><a href="#sec-4">4. Leyenda Interactiva</a></li>
+            <li><a href="#sec-5">5. Auditoría Multicapa</a></li>
+            <li><a class="sub-item" href="#sec-5-1">5.1 Realizar Auditoría</a></li>
+            <li><a class="sub-item" href="#sec-5-2">5.2 Resultados Inspector</a></li>
+            <li><a href="#sec-6">6. Precisión y Búsqueda</a></li>
+            <li><a class="sub-item" href="#sec-6-1">6.1 Búsqueda Coordenadas</a></li>
+            <li><a class="sub-item" href="#sec-6-2">6.2 Cuadrícula (Grid)</a></li>
+            <li><a class="sub-item" href="#sec-6-3">6.3 Modo Comparación</a></li>
+            <li><a class="sub-item" href="#sec-6-5">6.5 Transparencia</a></li>
+            <li><a href="#glosario">📜 anda por favor Técnico</a></li>
+        </ul>
+    </nav>
+
+    <!-- CONTENIDO PRINCIPAL (DERECHA) -->
+    <main class="content">
+        
+        <section id="resumen">
+            <h1>Plataforma LUCIDA</h1>
+            <div class="subtitle">Luz Urbana, Contaminación e Inteligencia de Datos Abiertos</div>
+            
+            <h2>¿Qué hacemos?</h2>
+            <p><strong>LUCIDA</strong> es un visor cartográfico avanzado y un motor de análisis geoespacial enfocado en evaluar la contaminación lumínica en Uruguay. Nuestra plataforma tiene como propósito democratizar el acceso a datos satelitales complejos, permitiendo a investigadores, gestores ambientales y ciudadanos analizar cómo impacta la luz artificial nocturna en nuestro entorno.</p> 
+            <p>Para lograrlo, integramos la intensidad de la luz medida desde el espacio con variables antropográficas y ecológicas cruciales: la presencia y altura de edificios, redes viales, densidad de población y zonas protegidas de alto valor ecológico (SNAP).</p>
+        </section>
+
+        <section id="aplicacion">
+            <h2>🌍 Aplicación Interactiva (Google Earth Engine)</h2>
+            <p>A continuación, puedes interactuar directamente con el motor cartográfico de LUCIDA. Utiliza los controles de la izquierda para cambiar las capas y haz clic en el mapa para auditar cualquier píxel de Uruguay.</p>
+            
+            <!-- REEMPLAZA EL SRC CON TU LINK DE GOOGLE EARTH ENGINE -->
+            <iframe src="https://visualizadorlucida.users.earthengine.app/view/lucida" width="100%" height="600px"></iframe>
+        </section>
+
+        <hr style="margin: 50px 0; border: 0; border-top: 1px dashed #cbd5e1;">
+
+        <h1>Manual de Usuario</h1>
+
+        <section id="sec-1">
+            <h3>1. Introducción y Propósito</h3>
+            <p>LUCIDA integra mediciones de intensidad lumínica con capas de datos socioambientales clave en todo el territorio de Uruguay. Esto facilita el diagnóstico rápido del crecimiento urbano y de la degradación del cielo nocturno.</p>
+            
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de la introducción y propósito:</strong></p>
+                <!-- REEMPLAZA src CON LA RUTA DE TU GIF -->
+                <img class="gif-placeholder" src="MJ-giphy.gif" alt="Demostración Introducción">
+            </div>
+        </section>
+
+        <section id="sec-2">
+            <h3>2. Estructura de la Pantalla Principal</h3>
+            <p>Al cargar la plataforma en tu navegador, la interfaz se divide de forma permanente en dos secciones operativas principales:</p>
+            
+            <div id="sec-2-1">
+                <h4>2.1. El Visor Cartográfico (Sector Derecho)</h4>
+                <p>Es el mapa interactivo base sobre el cual se proyecta toda la información espacial.</p>
+                <ul>
+                    <li><strong>Navegación:</strong> Puedes hacer clic y arrastrar para desplazarte por el territorio, o bien usar la rueda del ratón y los botones en pantalla para controlar el zoom.</li>
+                    <li><strong>Capa Base:</strong> Por defecto se visualiza la vista satelital diurna del sensor <strong>SENTINEL-2</strong> para proveer un contexto real y detallado del terreno.</li>
+                    <li><strong>Cursor:</strong> Si el cursor toma forma de "cruz" (+), significa que el mapa está en modo de escaneo, listo para extraer datos mediante un clic.</li>
+                </ul>
+            </div>
+
+            <div id="sec-2-2">
+                <h4>2.2. El Panel de Control (Sector Izquierdo)</h4>
+                <p>Este sector permite comandar qué información mostrar en el visor cartográfico y leer detalladamente las auditorías efectuadas. Se organiza en cinco bloques específicos.</p>
+            </div>
+
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de la estructura de la interfaz:</strong></p>
+                <img class="gif-placeholder" src="ruta-a-tu-gif-seccion-2.gif" alt="Demostración Interfaz Principal">
+            </div>
+        </section>
+
+        <section id="sec-3">
+            <h3>3. Bloque de Capas y Variables (Visualización)</h3>
+            <p>Bajo el menú desplegable <strong>CAPAS DISPONIBLES</strong> puedes seleccionar qué cartografía procesar. Estas se dividen según su naturaleza en cálculos internos de la plataforma o datos crudos institucionales:</p>
+
+            <div id="sec-3-1">
+                <h4>3.1. Capas de Análisis Espacial</h4>
+                <ul>
+                    <li><strong>Análisis: Evolución Histórica:</strong> Proyecta la luminosidad nocturna. Activa un menú secundario llamado <strong>AÑO DE OBSERVACIÓN</strong> para alternar datos entre los años 2017 y 2024. La escala transiciona de colores fríos (poca luz) a cálidos (mucha luz).</li>
+                    <li><strong>Análisis: Delta (2017-2024):</strong> Refleja el "cambio neto" de luz a lo largo de 7 años. Las zonas <strong>rojas</strong> exponen un aumento drástico, las <strong>azules</strong> una disminución y las <strong>blancas</strong> estabilidad lumínica.</li>
+                    <li><strong>Análisis: Mapa de Anomalías:</strong> Resalta en tonos anaranjados y rojos los sectores con emisiones lumínicas desproporcionadas respecto a sus edificios construidos. Es una herramienta ideal para hallar rutas sobreiluminadas, fallas en el alumbrado público o reflectores industriales mal apantallados.</li>
+                </ul>
+            </div>
+
+            <div id="sec-3-2">
+                <h4>3.2. Capas de Variables Físicas y Sociales</h4>
+                <ul>
+                    <li><strong>Huella Edilicia:</strong> Delimita en color rojo los contornos de las construcciones detectadas mediante satélite.</li>
+                    <li><strong>Altura Edilicia:</strong> Clasifica las edificaciones según su altura estimada: negro para bajas (0-5m), gris para medias (5-15m) y blanco para estructuras altas (+15m).</li>
+                    <li><strong>Rutas Nacionales:</strong> Traza en color amarillo la red vial completa de Uruguay.</li>
+                    <li><strong>Densidad Poblacional:</strong> Mapa de calor azul que indica la concentración de habitantes por kilómetro cuadrado.</li>
+                    <li><strong>Uso del Suelo (MGAP):</strong> Colorea el terreno según su clasificación agropecuaria o ecosistema natural.</li>
+                    <li><strong>Áreas Protegidas (SNAP):</strong> Muestra polígonos con bordes verdes y rellenos semitransparentes correspondientes a las zonas bajo conservación del Sistema Nacional de Áreas Protegidas.</li>
+                </ul>
+                <blockquote>ℹ️ Nota: Justo debajo de los selectores, el recuadro <strong>FUENTE DE DATOS Y METODOLOGÍA</strong> detalla el origen institucional de la capa activa.</blockquote>
+            </div>
+
+            <div id="sec-3-3">
+                <h4>3.3. Fundamentos de los Cálculos Analíticos</h4>
+                <p>LUCIDA no es un mapa estático; procesa cruces de variables en tiempo real mediante metodologías matemáticas rigurosas:</p>
+                <ul>
+                    <li><strong>A. Evolución Histórica (Radiancia):</strong> El satélite toma múltiples capturas anuales propensas a ruidos (nubes, humo, reflejos de la luna). LUCIDA filtra estas anomalías y calcula el promedio ponderado de observaciones en cielos completamente despejados. Esto asegura que el brillo responda a luz artificial constante. La unidad de medida es <span class="inline-formula">(nW / cm²) · sr</span> (nanowatts por estereorradián sobre centímetro cuadrado).</li>
+                    <li><strong>B. Capa Delta (2017-2024):</strong> Se basa en la sustracción directa:
+                        <div class="formula">Δ = Intensidad de Luz (2024) - Intensidad de Luz (2017)</div>
+                        Un valor positivo (rojo) delata expansión urbana o nuevas luminarias, mientras que un valor negativo (azul) devela atenuaciones por recambio tecnológico de focos, demoliciones o caída de actividad industrial.
+                    </li>
+                    <li><strong>C. Mapa de Anomalías Lumínicas:</strong> Aplica la siguiente relación matemática:
+                        <div class="formula">Índice de Anomalía = Intensidad de Luz / (Porcentaje de Edificios + 1)</div>
+                        El "+1" actúa como un suavizado matemático para impedir errores de división por cero en campos abiertos. Si el índice sube, revela emisión lumínica alta donde no hay infraestructura física, detectando automáticamente focos contaminantes o luminarias ineficientes que proyectan su energía directo al cielo.
+                    </li>
+                </ul>
+            </div>
+
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de Capas, Variables y Análisis:</strong></p>
+                <img class="gif-placeholder" src="ruta-a-tu-gif-seccion-3.gif" alt="Demostración Capas y Análisis">
+            </div>
+        </section>
+
+        <section id="sec-4">
+            <h3>4. Bloque de Leyenda Interactiva (Filtros Dinámicos)</h3>
+            <p>Al activar cualquier capa, se despliega de forma dinámica una leyenda en el panel operativo izquierdo. Esta sección funciona como un filtro activo:</p>
+            <ul>
+                <li><strong>Casillas de Verificación:</strong> Cada rango de color cuenta con un checkbox.</li>
+                <li><strong>Filtrado Inmediato:</strong> Al desmarcar una casilla, ese rango desaparece automáticamente de la visualización del mapa. Esto te permite, por ejemplo, aislar únicamente los focos de contaminación más críticos (rojos y amarillos) y limpiar el resto del mapa base.</li>
+            </ul>
+
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de Filtros y Leyendas Dinámicas:</strong></p>
+                <img class="gif-placeholder" src="ruta-a-tu-gif-seccion-4.gif" alt="Demostración Leyenda Interactiva">
+            </div>
+        </section>
+
+        <section id="sec-5">
+            <h3>5. Bloque de Auditoría Multicapa</h3>
+            
+            <div id="sec-5-1">
+                <h4>5.1. Cómo realizar una auditoría espacial</h4>
+                <ol>
+                    <li>Explora el mapa interactivo hasta localizar la zona de estudio.</li>
+                    <li>Realiza un <strong>clic izquierdo</strong> sobre el píxel exacto que deseas inspeccionar.</li>
+                    <li>Aparecerá un recuadro perimetral rojo brillante indicando la zona en análisis.</li>
+                    <li>El panel lateral mostrará momentáneamente el estado <code>"Extrayendo datos del píxel..."</code>.</li>
+                    <li>Tras procesar en la nube, emergerá la tabla con todas las variables consolidadas para esas coordenadas.</li>
+                </ol>
+            </div>
+
+            <div id="sec-5-2">
+                <h4>5.2. Interpretación de los Resultados del Inspector</h4>
+                <p>El inspector es inteligente: si un dato no aplica al entorno geográfico seleccionado (por ejemplo, auditorías en medio del Río de la Plata), esa fila se ocultará de forma automática para optimizar espacio. Las variables legibles son:</p>
+                <ul>
+                    <li><strong>Coordenadas:</strong> Latitud y Longitud geográficas del píxel.</li>
+                    <li><strong>Radiancia:</strong> Intensidad exacta de luz artificial hacia el espacio.</li>
+                    <li><strong>Obs. Válidas:</strong> Control de calidad de la información. Indica cuántas noches despejadas capturó el satélite en el año; a mayor número, mayor robustez estadística del dato.</li>
+                    <li><strong>Delta (17 vs 24):</strong> Variación neta de los nanowatios de luz emitidos desde el 2017.</li>
+                    <li><strong>Anomalía Lum:</strong> Puntuación de exceso lumínico. Valores mayores a 4 o 5 alertan de contaminación severa injustificada por infraestructura.</li>
+                    <li><strong>Huella Edilicia:</strong> Porcentaje del cuadrante (píxel de 20x20 metros) que está cubierto por estructuras.</li>
+                    <li><strong>Altura Edilicia:</strong> Altura promedio calculada para los techos del sector.</li>
+                    <li><strong>Población:</strong> Densidad estimada de habitantes por kilómetro cuadrado.</li>
+                    <li><strong>Uso del suelo:</strong> Clasificación oficial del terreno (urbano, agrícola, monte nativo, etc.).</li>
+                    <li><strong>Ruta Cercana:</strong> Distancia métrica exacta hacia la carretera nacional más próxima.</li>
+                    <li><strong>Área SNAP:</strong> Muestra el nombre del ecosistema protegido si el píxel se encuentra dentro de sus márgenes de conservación.</li>
+                </ul>
+            </div>
+
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de Auditorías sobre el mapa:</strong></p>
+                <img class="gif-placeholder" src="ruta-a-tu-gif-seccion-5.gif" alt="Demostración Auditoría Multicapa">
+            </div>
+        </section>
+
+        <section id="sec-6">
+            <h3>6. Herramientas de Precisión y Búsqueda</h3>
+
+            <div id="sec-6-1">
+                <h4>6.1. Búsqueda Directa por Coordenadas</h4>
+                <p>Para realizar inspecciones directas con coordenadas de GPS o registros previos sin navegación manual:</p>
+                <ol>
+                    <li>Ve al cuadro de texto del bloque <strong>AUDITORÍA MULTICAPA</strong>.</li>
+                    <li>Digita la latitud y longitud separadas por una coma o espacio. Es mandatorio incorporar el signo negativo para ubicar Sudamérica correctamente (Ejemplo: <code>-34.90, -56.19</code>).</li>
+                    <li>Presiona el botón <strong>Ir</strong>. El visor se encuadrará y extraerá la información de forma automatizada.</li>
+                </ol>
+            </div>
+
+            <div id="sec-6-2">
+                <h4>6.2. Cuadrícula de Referencia (Grid)</h4>
+                <p>Al activar la opción <strong>Mostrar Cuadrícula de Referencia</strong>, el mapa proyecta una sutil malla blanca sobre el país. Cada celda equivale a una dimensión aproximada de 500 metros por 500 metros terrestres, sirviendo como escala visual rápida para medir las manchas urbanas sin acudir a herramientas métricas.</p>
+            </div>
+
+            <div id="sec-6-3">
+                <h4>6.3. Modo Comparación (Pantalla Dividida)</h4>
+                <p>Para evaluar transformaciones territoriales contundentes, tilda la casilla <strong>"Comparar dos años (split)"</strong>. El mapa se dividirá en dos sectores sincronizados en navegación y zoom. A través de los selectores temporales integrados, puedes posicionar el año 2017 a la izquierda y el 2024 a la derecha para contrastar la evolución deslizando la barra central. <em>(Nota: Herramienta optimizada para capas VIIRS de Evolución Histórica).</em></p>
+            </div>
+
+            <div id="sec-6-5">
+                <h4>6.5. Control de Transparencia (Opacidad)</h4>
+                <p>Si las intensidades de los mapas de luz encubren la visualización de una calle o estructura física base, utiliza el deslizador <strong>Transparencia VIIRS</strong>. Llevar la barra hacia la izquierda aumentará la transparencia de la capa analítica, revelando la imagen diurna del sensor Sentinel-2 subyacente.</p>
+            </div>
+
+            <div class="gif-container">
+                <p>💡 <strong>Demostración de las herramientas avanzadas y de precisión:</strong></p>
+                <img class="gif-placeholder" src="ruta-a-tu-gif-seccion-6.gif" alt="Demostración Herramientas de Precisión">
+            </div>
+        </section>
+
+        <section id="glosario">
+            <h2>📜 Glosario Técnico de Referencia</h2>
+            <ul>
+                <li><strong>Radiancia:</strong> Magnitud que cuantifica la energía de la luz artificial urbana que escapa rumbo al espacio exterior (<span class="inline-formula">nW / cm² · sr</span>).</li>
+                <li><strong>VIIRS:</strong> Conjunto de radiómetros a bordo de los satélites NOAA estadounidenses; actúan como los lentes nocturnos primarios que procesa LUCIDA.</li>
+                <li><strong>Sentinel-2:</strong> Constelación óptica de la Agencia Espacial Europea (Copernicus) empleada para los mapas de base diurnos libres de nubes.</li>
+                <li><strong>Píxel:</strong> Unidad mínima de resolución espacial en la plataforma que almacena el vector de variables ambientales apiladas.</li>
+                <li><strong>Anomalía Lumínica:</strong> Indicador desarrollado por LUCIDA que relaciona intensidad de brillo versus densidad edilicia para hallar contaminación desproporcionada.</li>
+                <li><strong>Delta (Variación Espacial):</strong> Operación matemática de resta de luz (2024 - 2017) para identificar expansión o atenuación lumínica.</li>
+                <li><strong>Huella Edilicia:</strong> Porcentaje de suelo ocupado por construcciones obtenido de la base de datos de Inteligencia Artificial <em>Open Buildings</em>.</li>
+                <li><strong>SNAP:</strong> Sistema Nacional de Áreas Protegidas de Uruguay; polígonos ecológicos vulnerables a los impactos de la iluminación artificial.</li>
+            </ul>
+        </section>
+
+    </main>
+
+</body>
+</html>
