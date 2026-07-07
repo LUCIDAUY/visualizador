@@ -1,0 +1,712 @@
+// ==========================================
+// 1. PROCESAMIENTO DE DATOS (Backend)
+// ==========================================
+
+var uruguay = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
+  .filter(ee.Filter.eq('country_na', 'Uruguay'));
+
+var departamentos = ee.FeatureCollection("FAO/GAUL/2015/level1")
+  .filter(ee.Filter.eq('ADM0_NAME', 'Uruguay'));
+
+var mascara_uruguay = ee.Image.constant(1).clipToCollection(uruguay).mask();
+
+var lienzo_vacio = ee.Image().byte();
+var bordes_deptos = lienzo_vacio.paint({featureCollection: departamentos, color: 1, width: 1})
+  .updateMask(mascara_uruguay);
+
+var lonLat = ee.Image.pixelLonLat();
+var lonGrid = lonLat.select('longitude').mod(0.0001).abs().lt(0.003);
+var latGrid = lonLat.select('latitude').mod(0.0001).abs().lt(0.003);
+var cuadricula = lonGrid.or(latGrid).selfMask().updateMask(mascara_uruguay);
+
+// ── A. Radiancia VIIRS ──
+var viirs = ee.ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMCFG')
+  .filterDate('2017-01-01', '2024-12-31')
+  .filterBounds(uruguay)
+  .select('avg_rad');
+
+var viirsProj = viirs.first().projection();
+
+function suavizarViirs(img) {
+  return img
+    .setDefaultProjection(viirsProj)
+    .unmask(0)
+    .focal_mean({radius: 2, kernelType: 'gaussian', units: 'pixels', iterations: 2})
+    .reproject({crs: viirsProj, scale: 500})
+    .updateMask(mascara_uruguay);
+}
+
+var years = ee.List.sequence(2017, 2024);
+var anuales = ee.ImageCollection(years.map(function(y) {
+  return suavizarViirs(viirs.filter(ee.Filter.calendarRange(y, y, 'year')).max()).set('year', y);
+}));
+
+var L2017 = anuales.filter(ee.Filter.eq('year', 2017)).first();
+var L2024 = anuales.filter(ee.Filter.eq('year', 2024)).first();
+var delta = L2024.subtract(L2017).rename('delta_L');
+
+// ── B. Sentinel-2 anual ──
+var sentinelBase = function(year) {
+  var col = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterDate(year + '-01-01', year + '-12-31')
+    .filterBounds(uruguay)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+    .select(['B4', 'B3', 'B2']);
+  return col.median().updateMask(mascara_uruguay);
+};
+
+var S2_VIS = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500, gamma: 1.3};
+
+// ── C. Edificaciones ──
+var buildings = ee.ImageCollection('GOOGLE/Research/open-buildings-temporal/v1')
+  .filterDate('2022-01-01', '2023-12-31')
+  .filterBounds(uruguay);
+
+var huella_edilicia   = buildings.select('building_presence').mean().multiply(100).rename('huella');
+var bordes_edificios  = ee.Algorithms.CannyEdgeDetector(huella_edilicia, 5).selfMask().rename('presencia');
+var densidad_edilicia = buildings.select('building_height').mean().rename('altura_media');
+
+var rutas_mtop     = ee.FeatureCollection("projects/lucida-498822/assets/rutas_mtop");
+var rutas          = rutas_mtop.filterBounds(uruguay);
+var distancia_rutas = rutas.distance(20000);
+var rutas_raster   = lienzo_vacio.paint({featureCollection: rutas, color: 1, width: 2}).updateMask(mascara_uruguay);
+
+var snap        = ee.FeatureCollection("projects/lucida-498822/assets/areas-snap").filterBounds(uruguay);
+var snap_raster = lienzo_vacio.paint({featureCollection: snap, color: 1}).updateMask(mascara_uruguay);
+
+// ── D. Población y Uso del Suelo ──
+var pop_cruda  = ee.ImageCollection("WorldPop/GP/100m/pop").filterDate('2020-01-01', '2021-01-01').select('population').mean();
+var poblacion  = pop_cruda.divide(ee.Image.pixelArea()).multiply(1000000).rename('poblacion');
+var uso_suelo  = ee.Image("projects/lucida-498822/assets/Cobertura_y_Uso_del_Suelo_2021").updateMask(mascara_uruguay);
+
+var clasesOriginales = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27];
+var clasesVisuales   = [1,2,3,4,4,4,3,5,6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 7, 8];
+var uso_suelo_visual = uso_suelo.remap(clasesOriginales, clasesVisuales);
+
+// ── E. Anomalía ──
+var anomalia_img = L2024.divide(huella_edilicia.add(1)).rename('anomalia');
+
+// ==========================================
+// ESTADOS SLD
+// ==========================================
+var stateRad = [
+  {c:'#000000',q:0.1,  l:'0.00 - 0.10',a:true}, {c:'#001431',q:0.15, l:'0.10 - 0.15',a:true},
+  {c:'#219a8c',q:0.25, l:'0.15 - 0.25',a:true}, {c:'#08bd40',q:0.3,  l:'0.25 - 0.30',a:true},
+  {c:'#00db00',q:0.35, l:'0.30 - 0.35',a:true}, {c:'#6deb00',q:1.5,  l:'0.35 - 1.50',a:true},
+  {c:'#53e700',q:2.0,  l:'1.50 - 2.00',a:true}, {c:'#adf300',q:3.0,  l:'2.00 - 3.00',a:true},
+  {c:'#ffff00',q:6.0,  l:'3.00 - 6.00',a:true}, {c:'#f7cf08',q:15.0, l:'6.00 - 15.0',a:true},
+  {c:'#efa810',q:30.0, l:'15.0 - 30.0',a:true}, {c:'#cf6a2b',q:40.0, l:'30.0 - 40.0',a:true},
+  {c:'#bd3829',q:65.0, l:'40.0 - 65.0',a:true}, {c:'#bd3c31',q:80.0, l:'65.0 - 80.0',a:true},
+  {c:'#b40010',q:2000.0,l:'80.0 - 150+',a:true}
+];
+var stateAnom = [
+  {c:'#000000',q:0.5,  l:'0.0 - 0.5 (Proporcional)',a:true}, {c:'#007a55',q:2.0,   l:'0.5 - 2.0',a:true},
+  {c:'#2fdb00',q:4.0,  l:'2.0 - 4.0',a:true},               {c:'#ffea00',q:6.0,   l:'4.0 - 6.0',a:true},
+  {c:'#ff8400',q:8.0,  l:'6.0 - 8.0',a:true},               {c:'#c20000',q:1000.0,l:'8.0 - 10.0+ (Crítica)',a:true}
+];
+var stateDelta  = [{c:'#0571b0',q:-0.5,l:'Disminución Fuerte',a:true},{c:'#f7f7f7',q:0.5,l:'Sin Cambios (~0)',a:true},{c:'#ca0020',q:20.0,l:'Aumento Fuerte',a:true}];
+var stateHuella = [{c:'#ff0000',l:'Contorno de Edificación',a:true}];
+var stateAltura = [{c:'#000000',q:5.0,l:'0 - 5 m (Suelo)',a:true},{c:'#888888',q:15.0,l:'5 - 15 m (Media)',a:true},{c:'#ffffff',q:100.0,l:'15+ m (Alta)',a:true}];
+var stateRutas  = [{c:'#ffff00',l:'Ruta Nacional',a:true}];
+var statePop    = [{c:'#f7fbff',q:500.0,l:'Baja (0-500)',a:true},{c:'#9ecae1',q:2500.0,l:'Media (500-2500)',a:true},{c:'#084594',q:50000.0,l:'Alta (>2500)',a:true}];
+var stateUso    = [
+  {c:'#969696',q:1,l:'Zona Urbanizada',a:true}, {c:'#ac6d0c',q:2,l:'Canteras y Minas',a:true},
+  {c:'#0064c8',q:3,l:'Humedales y Playas',a:true},{c:'#40e0d0',q:4,l:'Agua (Ríos, Lagos)',a:true},
+  {c:'#006400',q:5,l:'Monte Nativo',a:true},     {c:'#228B22',q:6,l:'Forestación',a:true},
+  {c:'#f5dbbb',q:7,l:'Agricultura / Frutales',a:true},{c:'#fffec2',q:8,l:'Campo Natural',a:true}
+];
+var stateSnap = [{c:'#2ca25f',l:'Área Protegida (SNAP)',a:true}];
+
+function buildSLD(arr) {
+  var s = '<RasterSymbolizer><ColorMap type="intervals" extended="false">';
+  arr.forEach(function(i){ s += '<ColorMapEntry color="'+i.c+'" quantity="'+i.q+'" opacity="'+(i.a?'1.0':'0.0')+'"/>'; });
+  return s + '</ColorMap></RasterSymbolizer>';
+}
+
+// ==========================================
+// 2. UI - COLORES Y ESTADO GLOBAL
+// ==========================================
+var colors = {
+  bg:'#0d1117', surface:'#161b22', text:'#c9d1d9', textMuted:'#8b949e',
+  accent:'#58a6ff', border:'#30363d', highlight:'#ff7b72'
+};
+
+var modoComparacion      = false;
+var currentSelectedPoint = null;
+
+// ==========================================
+// 3. HELPERS DE CAPAS POR NOMBRE
+// ==========================================
+
+// Reemplaza una capa existente por nombre, o la agrega si no existe
+function setNamedLayer(mapa, nombre, layer) {
+  var layers = mapa.layers();
+  for (var i = 0; i < layers.length(); i++) {
+    if (layers.get(i).getName() === nombre) {
+      layers.set(i, layer);
+      return;
+    }
+  }
+  layers.add(layer);
+}
+
+// Elimina una capa por nombre si existe
+function removeNamedLayer(mapa, nombre) {
+  var layers = mapa.layers();
+  for (var i = 0; i < layers.length(); i++) {
+    if (layers.get(i).getName() === nombre) {
+      layers.remove(layers.get(i));
+      return;
+    }
+  }
+}
+
+// Nombres de capas dinámicas (constantes para evitar typos)
+var NOM = {
+  S2_MAIN:    'Sentinel-2',
+  S2_LEFT:    'Sentinel-2 Izq',
+  S2_RIGHT:   'Sentinel-2 Der',
+  VIIRS_MAIN: 'VIIRS',
+  VIIRS_LEFT: 'VIIRS Izq',
+  VIIRS_RIGHT:'VIIRS Der',
+  GRID_MAIN:  'Cuadrícula',
+  GRID_LEFT:  'Cuadrícula Izq',
+  GRID_RIGHT: 'Cuadrícula Der',
+  PIXEL_MAIN: 'Píxel',
+  PIXEL_LEFT: 'Píxel Izq'
+};
+
+// ==========================================
+// 4. MAPAS
+// ==========================================
+
+function setBasemap(mapa, tieneSentinel) {
+  mapa.setOptions(tieneSentinel ? 'ROADMAP' : 'SATELLITE');
+}
+
+// ── mainMap ──
+var mainMap = ui.Map();
+setBasemap(mainMap, true);
+mainMap.style().set({cursor: 'crosshair'});
+mainMap.centerObject(uruguay, 7);
+
+// Capas fijas (siempre presentes)
+mainMap.layers().add(ui.Map.Layer(bordes_deptos, {palette:['#ffffff']}, 'Departamentos', true, 0.6));
+
+// ── leftMap ──
+var leftMap = ui.Map();
+setBasemap(leftMap, true);
+leftMap.style().set({cursor: 'crosshair'});
+leftMap.setControlVisibility({all:false, zoomControl:true, scaleControl:true});
+leftMap.layers().add(ui.Map.Layer(bordes_deptos, {palette:['#ffffff']}, 'Deptos Izq', true, 0.6));
+
+// ── rightMap ──
+var rightMap = ui.Map();
+setBasemap(rightMap, true);
+rightMap.setControlVisibility({all:false, scaleControl:true});
+rightMap.layers().add(ui.Map.Layer(bordes_deptos, {palette:['#ffffff']}, 'Deptos Der', true, 0.6));
+
+// ── Sincronización de cámara ──
+var linker = ui.Map.Linker([mainMap, leftMap, rightMap]);
+
+// ── Etiquetas flotantes de año ──
+function getLabelStyle(pos) {
+  return {fontWeight:'bold', fontSize:'14px', backgroundColor:colors.surface,
+          padding:'5px 10px', border:'1px solid '+colors.border, position:pos, color:colors.accent};
+}
+var labelMain  = ui.Label({value:'', style:getLabelStyle('bottom-right')});
+var labelLeft  = ui.Label({value:'', style:getLabelStyle('bottom-left')});
+var styleRight = getLabelStyle('bottom-right');
+styleRight.color = colors.highlight;
+var labelRight = ui.Label({value:'', style:styleRight});
+
+mainMap.add(labelMain);
+leftMap.add(labelLeft);
+rightMap.add(labelRight);
+
+// ── SplitPanel ──
+var splitPanel = ui.SplitPanel({firstPanel:leftMap, secondPanel:rightMap, wipe:true, style:{stretch:'both'}});
+
+// ==========================================
+// 5. PANEL LATERAL
+// ==========================================
+var sidePanel = ui.Panel({
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {width:'480px', backgroundColor:colors.bg, padding:'24px', border:'1px solid '+colors.border}
+});
+
+function createDivider() {
+  return ui.Panel({style:{height:'1px', backgroundColor:colors.border, margin:'15px 0'}});
+}
+
+var title    = ui.Label('LUCIDA', {fontWeight:'bold', fontSize:'32px', color:colors.accent, backgroundColor:colors.bg, margin:'0 0 5px 0'});
+var subtitle = ui.Label('Luz Urbana: Contaminación e Inteligencia de Datos Abiertos', {fontSize:'13px', color:colors.textMuted, backgroundColor:colors.bg, margin:'0 0 10px 0'});
+
+// ── Selector de capa ──
+var layerLabel = ui.Label('🔍 CAPAS DISPONIBLES', {fontWeight:'bold', fontSize:'12px', color:colors.textMuted, backgroundColor:colors.bg, margin:'10px 0 8px 0'});
+var layerSelect = ui.Select({
+  items:['Análisis: Evolución Histórica','Análisis: Delta (2017-2024)','Análisis: Mapa de Anomalías',
+         'Variable: Altura Edilicia','Variable: Huella Edilicia (Bordes)',
+         'Variable: Rutas Nacionales','Variable: Densidad Poblacional','Variable: Uso del Suelo (MGAP)',
+         'Variable: Áreas Protegidas (SNAP)'],
+  value:'Análisis: Evolución Histórica',
+  style:{width:'100%', backgroundColor:colors.bg, margin:'0 0 15px 0'}
+});
+
+// ── Año único ──
+var yearLabel  = ui.Label('📅 AÑO DE OBSERVACIÓN', {fontWeight:'bold', fontSize:'12px', color:colors.textMuted, backgroundColor:colors.bg, margin:'0 0 8px 0'});
+var yearSelect = ui.Select({items:['2017','2018','2019','2020','2021','2022','2023','2024'], value:'2024', style:{width:'100%', backgroundColor:colors.bg}});
+
+// ── Opacidad VIIRS (modo normal) ──
+var mainOpacityLabel  = ui.Label('Transparencia VIIRS:', {color:colors.textMuted, fontSize:'12px', backgroundColor:colors.bg, margin:'10px 0 0 0'});
+var mainOpacitySlider = ui.Slider({
+  min:0, max:1, value:1, step:0.05,
+  style:{width:'100%', backgroundColor:colors.bg},
+  onChange: function(v) {
+    var l = mainMap.layers();
+    for (var i = 0; i < l.length(); i++) {
+      if (l.get(i).getName() === NOM.VIIRS_MAIN) { l.get(i).setOpacity(v); break; }
+    }
+  }
+});
+
+// ── Comparador ──
+var compareCheckbox = ui.Checkbox({label:'Comparar dos años (split)', value:false, style:{color:colors.accent, backgroundColor:colors.bg, padding:'6px 0 2px 0', fontWeight:'bold'}});
+
+var compareYearPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{backgroundColor:colors.bg, shown:false, margin:'4px 0 10px 0'}});
+var yearLeftLabel    = ui.Label('◀ AÑO IZQUIERDA', {fontWeight:'bold', fontSize:'11px', color:colors.textMuted, backgroundColor:colors.bg, margin:'4px 0 4px 0'});
+var yearLeftSelect   = ui.Select({items:['2017','2018','2019','2020','2021','2022','2023','2024'], value:'2017', style:{width:'100%', backgroundColor:colors.bg, margin:'0 0 10px 0'}});
+var yearRightLabel   = ui.Label('▶ AÑO DERECHA',   {fontWeight:'bold', fontSize:'11px', color:colors.textMuted, backgroundColor:colors.bg, margin:'0 0 4px 0'});
+var yearRightSelect  = ui.Select({items:['2017','2018','2019','2020','2021','2022','2023','2024'], value:'2024', style:{width:'100%', backgroundColor:colors.bg, margin:'0 0 10px 0'}});
+
+var compareOpacityLabel  = ui.Label('Transparencia VIIRS (ambos):', {color:colors.textMuted, fontSize:'11px', backgroundColor:colors.bg, margin:'10px 0 0 0'});
+var compareOpacitySlider = ui.Slider({
+  min:0, max:1, value:1, step:0.05,
+  style:{width:'100%', backgroundColor:colors.bg, margin:'0 0 10px 0'},
+  onChange: function(v) {
+    var ll = leftMap.layers(), rl = rightMap.layers();
+    for (var i = 0; i < ll.length(); i++) { if (ll.get(i).getName() === NOM.VIIRS_LEFT)  { ll.get(i).setOpacity(v); break; } }
+    for (var j = 0; j < rl.length(); j++) { if (rl.get(j).getName() === NOM.VIIRS_RIGHT) { rl.get(j).setOpacity(v); break; } }
+  }
+});
+
+compareYearPanel
+  .add(yearLeftLabel).add(yearLeftSelect)
+  .add(yearRightLabel).add(yearRightSelect)
+  .add(compareOpacityLabel).add(compareOpacitySlider);
+
+// ── Cuadrícula ──
+var gridCheckbox = ui.Checkbox({label:'Mostrar Cuadrícula de Referencia', value:false, style:{color:colors.text, backgroundColor:colors.bg, padding:'5px 0 0 0'}});
+
+// ── Info de fuente ──
+var infoBoxPanel = ui.Panel({style:{backgroundColor:colors.surface, padding:'15px', margin:'15px 0 0 0', border:'1px dashed '+colors.border}});
+var infoBoxTitle = ui.Label('ℹ️ FUENTE DE DATOS Y METODOLOGÍA', {fontWeight:'bold', fontSize:'11px', color:colors.accent, backgroundColor:colors.surface, margin:'0 0 8px 0'});
+var infoBoxText  = ui.Label('', {color:colors.textMuted, backgroundColor:colors.surface, fontSize:'12px', margin:'0'});
+infoBoxText.style().set('whiteSpace','pre-wrap');
+infoBoxPanel.add(infoBoxTitle).add(infoBoxText);
+
+function updateLayerInfo(mode) {
+  var t = {
+    'Análisis: Evolución Histórica':    "🛰️ VIIRS (NOAA VCMCFG) + Sentinel-2 (ESA/Copernicus) como base.\n\n🧮 VIIRS: máximo anual suavizado (Gaussian). Sentinel-2: mediana anual sin nubes (<10%).",
+    'Análisis: Delta (2017-2024)':       "🛰️  Fuente: Procesamiento propio sobre datos VIIRS.\n\n🧮 Detalle: Resta simple [Luz Máxima 2024 - Luz Máxima 2017].",
+    'Análisis: Mapa de Anomalías':       "🛰️  Fuente: VIIRS cruzados con Open Buildings.\n\n🧮 Detalle: [Radiancia 2024 / (Huella Edilicia + 1)].",
+    'Variable: Huella Edilicia (Bordes)':"🛰️  Fuente: Open Buildings V1 (Google Research).",
+    'Variable: Altura Edilicia':         "🛰️  Fuente: Open Buildings V1 Temporal (Google Research).",
+    'Variable: Rutas Nacionales':        "🛰️  Fuente: MTOP - Uruguay.",
+    'Variable: Densidad Poblacional':    "🛰️  Fuente: WorldPop Global Project.",
+    'Variable: Uso del Suelo (MGAP)':    "🛰️  Fuente: MGAP / RENARE - Uruguay.",
+    'Variable: Áreas Protegidas (SNAP)': "🛰️  Fuente: Ministerio de Ambiente / DINABISE."
+  };
+  infoBoxText.setValue(t[mode] || '');
+}
+
+// ==========================================
+// 6. LEYENDA
+// ==========================================
+var legendContainer = ui.Panel({style:{backgroundColor:colors.surface, padding:'15px', margin:'15px 0 0 0', border:'1px solid '+colors.border}});
+
+var makeToggleRow = function(color, name, isActive, onChange, compact) {
+  var pad  = compact ? '6px'  : '8px';
+  var wid  = compact ? '20px' : '24px';
+  var fSz  = compact ? '11px' : '12px';
+  var mBox = compact ? '0 0 2px 0' : '0 0 6px 0';
+  var mChk = compact ? '0 0 2px 10px' : '0 0 6px 12px';
+  var box  = ui.Label('', {backgroundColor:color, padding:pad, margin:mBox, width:wid, border:'1px solid #333'});
+  var chk  = ui.Checkbox({label:name, value:isActive, onChange:onChange, style:{color:colors.text, backgroundColor:colors.surface, margin:mChk, fontSize:fSz}});
+  return ui.Panel({widgets:[box,chk], layout:ui.Panel.Layout.Flow('horizontal'), style:{backgroundColor:colors.surface}});
+};
+
+function updateLegend(mode) {
+  legendContainer.clear();
+  var unit = '';
+  if (['Análisis: Evolución Histórica','Análisis: Delta (2017-2024)'].indexOf(mode) > -1) unit = ' [nW/cm²*sr]';
+  else if (mode === 'Variable: Altura Edilicia')      unit = ' [Metros]';
+  else if (mode === 'Variable: Densidad Poblacional') unit = ' [hab/km²]';
+  else if (mode === 'Análisis: Mapa de Anomalías')    unit = ' [Índice]';
+
+  legendContainer.add(ui.Label('LEYENDA DE DATOS' + unit, {fontWeight:'bold', fontSize:'11px', color:colors.accent, backgroundColor:colors.surface, margin:'0 0 10px 0'}));
+
+  var ri = function(arr, compact) {
+    arr.forEach(function(item) {
+      legendContainer.add(makeToggleRow(item.c, item.l, item.a, function(v){ item.a = v; renderLayers(); }, compact));
+    });
+  };
+
+  if      (mode === 'Análisis: Evolución Histórica')        ri(stateRad, true);
+  else if (mode === 'Análisis: Mapa de Anomalías')           ri(stateAnom, false);
+  else if (mode === 'Análisis: Delta (2017-2024)')           ri(stateDelta, false);
+  else if (mode === 'Variable: Huella Edilicia (Bordes)')    ri(stateHuella, false);
+  else if (mode === 'Variable: Altura Edilicia')             ri(stateAltura, false);
+  else if (mode === 'Variable: Rutas Nacionales')            ri(stateRutas, false);
+  else if (mode === 'Variable: Densidad Poblacional')        ri(statePop, false);
+  else if (mode === 'Variable: Uso del Suelo (MGAP)')        ri(stateUso, true);
+  else if (mode === 'Variable: Áreas Protegidas (SNAP)')     ri(stateSnap, false);
+}
+
+// ==========================================
+// 7. INSPECTOR DE PÍXEL
+// ==========================================
+var searchInput = ui.Textbox({placeholder:'Lat, Lon (Ej: -34.88, -56.16)', style:{width:'210px', backgroundColor:colors.surface, color:colors.text, border:'1px solid '+colors.border}});
+var searchBtn   = ui.Button({label:'Ir', style:{margin:'0 0 0 8px'}});
+var searchPanel = ui.Panel([searchInput, searchBtn], ui.Panel.Layout.flow('horizontal'), {backgroundColor:colors.surface, margin:'5px 0 15px 0'});
+
+var inspectorPanel  = ui.Panel({style:{backgroundColor:colors.surface, padding:'15px', border:'1px solid '+colors.border}});
+var infoInstruccion = ui.Label('Clic en el mapa para auditar el píxel.', {color:colors.textMuted, backgroundColor:colors.surface, fontSize:'12px', margin:'0 0 10px 0'});
+
+function createRow(lbl) {
+  var l = ui.Label(lbl,  {color:colors.textMuted, backgroundColor:colors.surface, fontSize:'12px', width:'140px'});
+  var v = ui.Label('-',  {color:colors.highlight, fontWeight:'bold', backgroundColor:colors.surface, fontSize:'12px'});
+  var p = ui.Panel([l,v], ui.Panel.Layout.flow('horizontal'), {backgroundColor:colors.surface, margin:'1px 0'});
+  return {panel:p, val:v, lbl:l};
+}
+
+var rowCoords   = createRow('📍 Coordenadas:');
+var rowRad      = createRow('Radiancia:');
+var rowRadRight = createRow('Radiancia (der):'); rowRadRight.lbl.style().set({color:colors.accent});
+var rowDelta    = createRow('Delta (17 vs 24):');
+var rowAnom     = createRow('Anomalía Lum.:');
+var rowBuildFP  = createRow('Huella Edilicia:');
+var rowBuildH   = createRow('Altura Edilicia:');
+var rowPop      = createRow('Población:');
+var rowLand     = createRow('Uso del Suelo:');
+var rowRoad     = createRow('Ruta Cercana:');
+var rowSnap     = createRow('Área SNAP:');
+
+var resultsPanel = ui.Panel({
+  widgets:[rowCoords.panel, ui.Panel({style:{height:'1px', backgroundColor:colors.border, margin:'5px 0'}}),
+           rowRad.panel, rowRadRight.panel, rowDelta.panel, rowAnom.panel,
+           rowBuildFP.panel, rowBuildH.panel, rowPop.panel, rowLand.panel, rowRoad.panel, rowSnap.panel],
+  layout: ui.Panel.Layout.flow('vertical'),
+  style:  {backgroundColor:colors.surface, shown:false}
+});
+
+inspectorPanel
+  .add(ui.Label('🔎 AUDITORÍA MULTICAPA', {fontWeight:'bold', fontSize:'11px', color:colors.accent, backgroundColor:colors.surface, margin:'0 0 5px 0'}))
+  .add(searchPanel).add(infoInstruccion).add(resultsPanel);
+
+// ==========================================
+// 8. LÓGICA DEL INSPECTOR
+// ==========================================
+var landClasses = {
+  1:'Zona Urbanizada',2:'Canteras / Minas',3:'Playas y Dunas',4:'Aguas artificiales',
+  5:'Represas de riego',6:'Aguas naturales',7:'Bañados y Humedales',8:'Bosque Nativo',
+  9:'Bosque Plantado',10:'Bosque Plantado (tala)',11:'Citrus',12:'Olivares',
+  13:'Agricultura',14:'Rastrojos de invierno',15:'Cultivo de Arroz',16:'Rastrojos de Arroz',
+  17:'Caña de Azucar',18:'Pivotes',19:'Rastrojos de Pasturas',20:'Zona Hortifrutivícola',
+  21:'Mezcla',22:'Campo Nat. y Horticultura',23:'Campo Natural',24:'Campo Nat. regenerado',
+  25:'Campo Nat. y Palmares',26:'Otros frutales',27:'Arbustos'
+};
+
+function ejecutarAuditoria(lon, lat, centrarMapa) {
+  infoInstruccion.setValue('Extrayendo datos...');
+  infoInstruccion.style().set('color', colors.accent);
+  resultsPanel.style().set('shown', false);
+
+  if (centrarMapa) { mainMap.setCenter(lon, lat, 15); leftMap.setCenter(lon, lat, 15); }
+
+  currentSelectedPoint = ee.Geometry.Point(lon, lat);
+  var boxOutline = ee.Image().byte().paint({
+    featureCollection: ee.FeatureCollection(currentSelectedPoint.buffer(250).bounds()),
+    color:1, width:3
+  });
+
+  setNamedLayer(mainMap, NOM.PIXEL_MAIN, ui.Map.Layer(boxOutline, {palette:[colors.highlight]}, NOM.PIXEL_MAIN));
+  setNamedLayer(leftMap, NOM.PIXEL_LEFT, ui.Map.Layer(boxOutline, {palette:[colors.highlight]}, NOM.PIXEL_LEFT));
+
+  rowCoords.val.setValue(lat.toFixed(4) + ', ' + lon.toFixed(4));
+  rowCoords.panel.style().set('shown', true);
+
+  var mode = layerSelect.getValue();
+  var year = parseInt(yearSelect.getValue());
+  var yl   = parseInt(yearLeftSelect.getValue());
+  var yr   = parseInt(yearRightSelect.getValue());
+
+  var imgConsulta = modoComparacion
+    ? anuales.filter(ee.Filter.eq('year', yl)).first()
+    : (mode === 'Análisis: Evolución Histórica' ? anuales.filter(ee.Filter.eq('year', year)).first() : L2024);
+
+  rowRad.lbl.setValue(modoComparacion ? 'Radiancia (' + yl + '):' :
+    (mode === 'Análisis: Evolución Histórica' ? 'Radiancia (' + year + '):' : 'Radiancia (2024):'));
+
+  var getSnapName = ee.Algorithms.If(
+    snap.filterBounds(currentSelectedPoint).size().gt(0),
+    snap.filterBounds(currentSelectedPoint).first().get('nombre'),
+    -9999
+  );
+
+  ee.Dictionary({
+    rad:        imgConsulta.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 500).get('avg_rad'),
+    radRight:   anuales.filter(ee.Filter.eq('year', yr)).first().unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 500).get('avg_rad'),
+    delta:      delta.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 500).get('delta_L'),
+    anom:       anomalia_img.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 500).get('anomalia'),
+    buildFP:    huella_edilicia.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 20).get('huella'),
+    buildH:     densidad_edilicia.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 20).get('altura_media'),
+    pop:        poblacion.unmask(-9999).reduceRegion(ee.Reducer.mean(), currentSelectedPoint, 100).get('poblacion'),
+    land:       uso_suelo.unmask(-9999).reduceRegion(ee.Reducer.first(), currentSelectedPoint, 10).get('b1'),
+    roadDist:   distancia_rutas.unmask(-9999).reduceRegion(ee.Reducer.first(), currentSelectedPoint, 10).get('distance'),
+    snapNombre: getSnapName
+  }).evaluate(function(res, err) {
+    if (err || !res) { infoInstruccion.setValue('Error en lectura.'); return; }
+
+    var ok  = function(v) { return v !== null && v !== undefined && v !== -9999; };
+    var cnt = 0;
+    var row = function(obj, cond, txt) {
+      if (cond) { obj.val.setValue(txt); obj.panel.style().set('shown', true); cnt++; }
+      else      { obj.panel.style().set('shown', false); }
+    };
+
+    row(rowRad, ok(res.rad), ok(res.rad) ? res.rad.toFixed(2) + ' nW/cm²*sr' : '');
+
+    if (modoComparacion && ok(res.radRight)) {
+      rowRadRight.lbl.setValue('Radiancia (' + yr + '):');
+      var diff = res.radRight - res.rad, signo = diff >= 0 ? '+' : '';
+      rowRadRight.val.setValue(res.radRight.toFixed(2) + ' nW/cm²*sr  (' + signo + diff.toFixed(2) + ')');
+      rowRadRight.panel.style().set('shown', true);
+    } else { rowRadRight.panel.style().set('shown', false); }
+
+    row(rowDelta,   ok(res.delta),   ok(res.delta)   ? res.delta.toFixed(2)   + ' nW/cm²*sr' : '');
+    row(rowAnom,    ok(res.anom),    ok(res.anom)    ? res.anom.toFixed(2)    : '');
+    row(rowBuildFP, ok(res.buildFP), ok(res.buildFP) ? res.buildFP.toFixed(1) + ' %' : '');
+    row(rowBuildH,  ok(res.buildH),  ok(res.buildH)  ? res.buildH.toFixed(1)  + ' m' : '');
+    row(rowPop,     ok(res.pop),     ok(res.pop)     ? res.pop.toFixed(0)     + ' hab/km²' : '');
+    row(rowSnap,    (res.snapNombre !== -9999 && res.snapNombre !== null), res.snapNombre || '');
+    row(rowLand,    ok(res.land),    ok(res.land) ? (landClasses[res.land] || 'Cód. ' + res.land) : '');
+
+    if (cnt > 0) {
+      rowRoad.val.setValue(ok(res.roadDist)
+        ? (res.roadDist > 1000 ? (res.roadDist/1000).toFixed(1)+' km' : res.roadDist.toFixed(0)+' m')
+        : '> 20 km');
+      rowRoad.panel.style().set('shown', true);
+      infoInstruccion.setValue('Datos cargados.');
+      infoInstruccion.style().set('color', colors.textMuted);
+      resultsPanel.style().set('shown', true);
+    } else {
+      infoInstruccion.setValue('No hay datos aquí.');
+      resultsPanel.style().set('shown', false);
+    }
+  });
+}
+
+mainMap.onClick(function(c) { ejecutarAuditoria(c.lon, c.lat, false); });
+leftMap.onClick(function(c) { ejecutarAuditoria(c.lon, c.lat, false); });
+
+function procesarBusqueda() {
+  var txt = searchInput.getValue();
+  if (!txt) return;
+  var p = txt.replace(/[^\d.-]/g,' ').trim().split(/\s+/);
+  if (p.length >= 2) {
+    var lat = parseFloat(p[0]), lon = parseFloat(p[1]);
+    if (!isNaN(lat) && !isNaN(lon)) ejecutarAuditoria(lon, lat, true);
+    else infoInstruccion.setValue('⚠️ Coordenadas inválidas. Usa: Lat, Lon');
+  } else { infoInstruccion.setValue('⚠️ Formato incorrecto. Usa: -34.88, -56.16'); }
+}
+searchBtn.onClick(procesarBusqueda);
+searchInput.onChange(procesarBusqueda);
+
+// ==========================================
+// 9. RENDER DE CAPAS
+// ==========================================
+
+var CAPAS_CON_SENTINEL = ['Análisis: Evolución Histórica'];
+
+function renderLayers() {
+  var mode = layerSelect.getValue();
+  var tieneSentinel = CAPAS_CON_SENTINEL.indexOf(mode) > -1;
+
+  // ── MODO COMPARACIÓN ──────────────────────────────────────────────
+  if (modoComparacion) {
+    var yl = parseInt(yearLeftSelect.getValue());
+    var yr = parseInt(yearRightSelect.getValue());
+
+    labelLeft.setValue('AÑO ' + yl);
+    labelRight.setValue('AÑO ' + yr);
+
+    setBasemap(leftMap,  true);
+    setBasemap(rightMap, true);
+
+    // Sentinel-2 base
+    setNamedLayer(leftMap,  NOM.S2_LEFT,  ui.Map.Layer(sentinelBase(yl), S2_VIS, NOM.S2_LEFT,  true));
+    setNamedLayer(rightMap, NOM.S2_RIGHT, ui.Map.Layer(sentinelBase(yr), S2_VIS, NOM.S2_RIGHT, true));
+
+    // VIIRS analítica
+    var viirsL = anuales.filter(ee.Filter.eq('year', yl)).first().updateMask(mascara_uruguay).sldStyle(buildSLD(stateRad));
+    var viirsR = anuales.filter(ee.Filter.eq('year', yr)).first().updateMask(mascara_uruguay).sldStyle(buildSLD(stateRad));
+    setNamedLayer(leftMap,  NOM.VIIRS_LEFT,  ui.Map.Layer(viirsL, {}, NOM.VIIRS_LEFT));
+    setNamedLayer(rightMap, NOM.VIIRS_RIGHT, ui.Map.Layer(viirsR, {}, NOM.VIIRS_RIGHT));
+
+    var op = compareOpacitySlider.getValue();
+    var ll = leftMap.layers(), rl = rightMap.layers();
+    for (var i = 0; i < ll.length(); i++) { if (ll.get(i).getName() === NOM.VIIRS_LEFT)  { ll.get(i).setOpacity(op); break; } }
+    for (var j = 0; j < rl.length(); j++) { if (rl.get(j).getName() === NOM.VIIRS_RIGHT) { rl.get(j).setOpacity(op); break; } }
+
+    // Cuadrícula
+    if (gridCheckbox.getValue()) {
+      setNamedLayer(leftMap,  NOM.GRID_LEFT,  ui.Map.Layer(cuadricula, {palette:['#ffffff']}, NOM.GRID_LEFT,  true, 0.15));
+      setNamedLayer(rightMap, NOM.GRID_RIGHT, ui.Map.Layer(cuadricula, {palette:['#ffffff']}, NOM.GRID_RIGHT, true, 0.15));
+    } else {
+      removeNamedLayer(leftMap,  NOM.GRID_LEFT);
+      removeNamedLayer(rightMap, NOM.GRID_RIGHT);
+    }
+
+    return;
+  }
+
+  // ── MODO NORMAL ───────────────────────────────────────────────────
+  setBasemap(mainMap, tieneSentinel);
+
+  if (tieneSentinel) {
+    var year = parseInt(yearSelect.getValue());
+    labelMain.setValue('AÑO ' + year);
+    labelMain.style().set('shown', true);
+    setNamedLayer(mainMap, NOM.S2_MAIN, ui.Map.Layer(sentinelBase(year), S2_VIS, NOM.S2_MAIN, true));
+  } else {
+    labelMain.style().set('shown', false);
+    removeNamedLayer(mainMap, NOM.S2_MAIN);
+  }
+
+  // Capa analítica
+  var analítica;
+  if (mode === 'Análisis: Evolución Histórica') {
+    var yr2 = parseInt(yearSelect.getValue());
+    analítica = ui.Map.Layer(
+      anuales.filter(ee.Filter.eq('year', yr2)).first().updateMask(mascara_uruguay).sldStyle(buildSLD(stateRad)),
+      {}, NOM.VIIRS_MAIN
+    );
+  } else if (mode === 'Análisis: Delta (2017-2024)') {
+    analítica = ui.Map.Layer(delta.updateMask(mascara_uruguay).sldStyle(buildSLD(stateDelta)), {}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Análisis: Mapa de Anomalías') {
+    analítica = ui.Map.Layer(anomalia_img.updateMask(mascara_uruguay).sldStyle(buildSLD(stateAnom)), {}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Huella Edilicia (Bordes)') {
+    analítica = ui.Map.Layer(bordes_edificios.updateMask(mascara_uruguay), {palette:['#ff0000']}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Altura Edilicia') {
+    analítica = ui.Map.Layer(densidad_edilicia.updateMask(mascara_uruguay).sldStyle(buildSLD(stateAltura)), {}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Rutas Nacionales') {
+    analítica = ui.Map.Layer(rutas_raster, {palette:['#ffff00'], min:1, max:1}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Densidad Poblacional') {
+    analítica = ui.Map.Layer(poblacion.updateMask(mascara_uruguay).sldStyle(buildSLD(statePop)), {}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Uso del Suelo (MGAP)') {
+    analítica = ui.Map.Layer(uso_suelo_visual.updateMask(mascara_uruguay).sldStyle(buildSLD(stateUso)), {}, NOM.VIIRS_MAIN);
+  } else if (mode === 'Variable: Áreas Protegidas (SNAP)') {
+    analítica = ui.Map.Layer(snap_raster, {palette:['#2ca25f'], min:1, max:1}, NOM.VIIRS_MAIN, true, 0.6);
+  }
+
+  setNamedLayer(mainMap, NOM.VIIRS_MAIN, analítica);
+
+  var l = mainMap.layers();
+  for (var k = 0; k < l.length(); k++) {
+    if (l.get(k).getName() === NOM.VIIRS_MAIN) { l.get(k).setOpacity(mainOpacitySlider.getValue()); break; }
+  }
+
+  // Cuadrícula
+  if (gridCheckbox.getValue()) {
+    setNamedLayer(mainMap, NOM.GRID_MAIN, ui.Map.Layer(cuadricula, {palette:['#ffffff']}, NOM.GRID_MAIN, true, 0.15));
+  } else {
+    removeNamedLayer(mainMap, NOM.GRID_MAIN);
+  }
+}
+
+// ==========================================
+// 10. EVENTOS
+// ==========================================
+compareCheckbox.onChange(function(checked) {
+  modoComparacion = checked;
+  var esEvolucion = (layerSelect.getValue() === 'Análisis: Evolución Histórica');
+
+  if (checked) {
+    var c = mainMap.getCenter(), z = mainMap.getZoom();
+    leftMap.centerObject(c, z);
+
+    compareYearPanel.style().set('shown', true);
+    yearLabel.style().set('shown', false);
+    yearSelect.style().set('shown', false);
+    mainOpacityLabel.style().set('shown', false);
+    mainOpacitySlider.style().set('shown', false);
+
+    ui.root.widgets().set(1, splitPanel);
+  } else {
+    var c2 = leftMap.getCenter(), z2 = leftMap.getZoom();
+    mainMap.centerObject(c2, z2);
+
+    compareYearPanel.style().set('shown', false);
+    yearLabel.style().set('shown', esEvolucion);
+    yearSelect.style().set('shown', esEvolucion);
+    mainOpacityLabel.style().set('shown', true);
+    mainOpacitySlider.style().set('shown', true);
+
+    // Limpiamos capas dinámicas del comparador al volver al modo normal
+    removeNamedLayer(leftMap,  NOM.S2_LEFT);
+    removeNamedLayer(rightMap, NOM.S2_RIGHT);
+    removeNamedLayer(leftMap,  NOM.VIIRS_LEFT);
+    removeNamedLayer(rightMap, NOM.VIIRS_RIGHT);
+    removeNamedLayer(leftMap,  NOM.GRID_LEFT);
+    removeNamedLayer(rightMap, NOM.GRID_RIGHT);
+
+    ui.root.widgets().set(1, mainMap);
+  }
+
+  renderLayers();
+});
+
+layerSelect.onChange(function(mode) {
+  var esEvolucion = (mode === 'Análisis: Evolución Histórica');
+
+  yearLabel.style().set('shown', esEvolucion && !modoComparacion);
+  yearSelect.style().set('shown', esEvolucion && !modoComparacion);
+  compareCheckbox.style().set('shown', esEvolucion);
+
+  if (!esEvolucion && modoComparacion) {
+    compareCheckbox.setValue(false, true);
+    return;
+  }
+
+  updateLayerInfo(mode);
+  updateLegend(mode);
+  renderLayers();
+});
+
+yearSelect.onChange(renderLayers);
+yearLeftSelect.onChange(renderLayers);
+yearRightSelect.onChange(renderLayers);
+gridCheckbox.onChange(renderLayers);
+
+// ==========================================
+// 11. ARMADO FINAL
+// ==========================================
+sidePanel
+  .add(title).add(subtitle).add(createDivider())
+  .add(layerLabel).add(layerSelect)
+  .add(yearLabel).add(yearSelect)
+  .add(mainOpacityLabel).add(mainOpacitySlider)
+  .add(compareCheckbox).add(compareYearPanel)
+  .add(gridCheckbox)
+  .add(infoBoxPanel).add(createDivider())
+  .add(legendContainer).add(createDivider())
+  .add(inspectorPanel);
+
+ui.root.clear();
+ui.root.add(sidePanel);
+ui.root.add(mainMap);
+
+updateLayerInfo('Análisis: Evolución Histórica');
+updateLegend('Análisis: Evolución Histórica');
+renderLayers();
