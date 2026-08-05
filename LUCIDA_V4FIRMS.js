@@ -490,7 +490,26 @@ var resultsPanel = ui.Panel({
 
 inspectorPanel
   .add(ui.Label('🔎 AUDITORÍA MULTICAPA', {fontWeight:'bold', fontSize:'11px', color:colors.accent, backgroundColor:colors.surface, margin:'0 0 5px 0'}))
-  .add(searchPanel).add(infoInstruccion).add(resultsPanel);
+  .add(searchPanel).add(infoInstruccion);
+  
+// ── Gráfico de radiancia anual ──
+var chartPanel = ui.Panel({
+  style: {
+    backgroundColor: colors.surface,
+    margin: '12px 0 0 0',
+    shown: false
+  }
+});
+var chartTitle = ui.Label('📊 RADIANCIA ANUAL 2017–2024 (nW/cm²·sr)', {
+  fontWeight: 'bold',
+  fontSize: '11px',
+  color: colors.accent,
+  backgroundColor: colors.surface,
+  margin: '0 0 6px 0'
+});
+chartPanel.add(chartTitle);
+
+inspectorPanel.add(resultsPanel).add(chartPanel);
 
 // ==========================================
 // 8. LÓGICA DEL INSPECTOR
@@ -505,6 +524,80 @@ var landClasses = {
   25:'Campo Nat. y Palmares',26:'Otros frutales',27:'Arbustos'
 };
 
+function buildRadianceChart(point) {
+  chartPanel.clear();
+  chartPanel.add(chartTitle);
+  chartPanel.style().set('shown', false);
+
+  // Para cada año, extrae la radiancia media en el punto (radio 500m = resolución VIIRS)
+  var radFeatures = anuales.map(function(img) {
+    var val = img.unmask(0)
+      .reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: point.buffer(500),
+        scale: 500,
+        maxPixels: 1e6
+      })
+      .get('avg_rad');
+    return ee.Feature(null, {
+      year: img.get('year'),
+      radiancia: ee.Number(val).multiply(100).round().divide(100) // 2 decimales
+    });
+  });
+
+  var fc = ee.FeatureCollection(radFeatures).sort('year');
+
+  var chart = ui.Chart.feature.byFeature({
+    features: fc,
+    xProperty: 'year',
+    yProperties: ['radiancia']
+  })
+  .setChartType('ColumnChart')
+  .setOptions({
+  title: '',
+  fontName: 'Roboto, Arial, sans-serif',
+  fontSize: 11,
+  backgroundColor: {fill:colors.bg, strokeWidth:1, stroke:'#e0e0e0', rx:4, ry:4},
+  chartArea: {backgroundColor:colors.bg, left:52, top:16, width:'78%', height:'62%'},
+
+  hAxis: {
+    title: 'Año',
+    titleTextStyle: {color:'#ffffff', fontName:'Roboto, Arial, sans-serif', fontSize:11, italic:false},
+    textStyle:      {color:'#ffffff', fontName:'Roboto, Arial, sans-serif', fontSize:11},
+    gridlines:      {color:'transparent'},
+    baselineColor:  '#e0e0e0',
+    // ── fix años: ticks explícitos, sin decimales ni comas ──
+    ticks: [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+    format: '####'
+  },
+
+  vAxis: {
+    title: 'nW/cm²·sr',
+    titleTextStyle: {color:'#ffffff', fontName:'Roboto, Arial, sans-serif', fontSize:11, italic:false},
+    textStyle:      {color:'#ffffff', fontName:'Roboto, Arial, sans-serif', fontSize:11},
+    gridlines:      {color:'#e8eaed', count:5},
+    baselineColor:  '#e0e0e0',
+    minValue: 0,
+    format: '#.##'
+  },
+
+  colors: [colors.accent],
+  bar:    {groupWidth:'55%'},
+  legend: {position:'none'},
+
+  // ── fix tooltip: muestra año + valor al hacer hover ──
+  focusTarget: 'category',
+  tooltip: {
+    textStyle: {color:'#3c4043', fontName:'Roboto, Arial, sans-serif', fontSize:12},
+    showColorCode: false
+  },
+
+  animation: {startup:true, duration:500, easing:'out'}
+});
+  chart.style().set({ margin: '0', stretch: 'horizontal' });
+  chartPanel.add(chart);
+  chartPanel.style().set('shown', true);}
+
 function ejecutarAuditoria(lon, lat, centrarMapa) {
   infoInstruccion.setValue('Extrayendo datos...');
   infoInstruccion.style().set('color', colors.accent);
@@ -514,6 +607,9 @@ function ejecutarAuditoria(lon, lat, centrarMapa) {
 
   currentSelectedPoint = ee.Geometry.Point(lon, lat);
   var pixelBuffer = currentSelectedPoint.buffer(1000); // radio 1 km → cuadrado ~2x2 km
+  
+  // Lanza el gráfico en paralelo (no espera al evaluate principal)
+  buildRadianceChart(currentSelectedPoint);
 
   var boxOutline = ee.Image().byte().paint({
     featureCollection: ee.FeatureCollection(pixelBuffer.bounds()),
