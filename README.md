@@ -36,16 +36,5 @@ Identifica zonas con emisión de luz desproporcionada respecto a su infraestruct
 $$A = \frac{L_{2024}}{H + 1}$$
 Donde $H$ es el porcentaje de Huella Edilicia (0-100). El factor $+1$ actúa como suavizado (*smoothing*) para evitar divisiones por cero en áreas naturales.
 
-## Requisitos y Configuración
-
-Para ejecutar este código, necesitas:
-1.  Una cuenta activa en [Google Earth Engine](https://earthengine.google.com/).
-2.  Acceso a los siguientes *Assets* privados (alojados en el proyecto de GEE):
-    * `projects/ee-joaquinkalabujov/assets/rutas_mtop`
-    * `projects/ee-joaquinkalabujov/assets/uso_suelo_mgap_2021`
-    * `projects/ee-joaquinkalabujov/assets/areas-snap`
-
-**Uso:** Simplemente pega el contenido de `app.js` en el Code Editor de GEE y haz clic en *Run*.
-
 ---
 *Desarrollado en JavaScript utilizando la API de Google Earth Engine.*
