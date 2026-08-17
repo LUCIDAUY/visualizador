@@ -1493,9 +1493,9 @@
     Traza en amarillo la red vial completa de Uruguay.
   </li>
   <li>
-    <strong><a href="https://www.worldpop.org/" target="_blank" rel="noopener">Densidad poblacional</a>:</strong>
-    Mapa de calor que indica concentración de habitantes por km².
-  </li>
+  <strong><a href="https://www.gub.uy/instituto-nacional-estadistica/censos2023pvh" target="_blank" rel="noopener">Densidad poblacional</a>:</strong>
+  Mapa de calor con la concentración de habitantes por km², calculada a partir del Censo Nacional de Población 2023 del INE Uruguay.
+</li>
   <li>
     <strong><a href="https://www.gub.uy/ministerio-ganaderia-agricultura-pesca/comunicacion/noticias/actualizacion-cobertura-uso-del-suelo-del-uruguay-ano-20202021" target="_blank" rel="noopener">Uso del suelo (MGAP)</a>:</strong>
     Colorea el terreno según clasificación agropecuaria o ecosistema.
@@ -1725,28 +1725,21 @@
             </div>
           </div>
           <div class="glosario-item">
-          <div class="glosario-term">
-            <a href="https://www.earthdata.nasa.gov/learn/find-data/near-real-time/firms/about-firms#ed-firms-frp" target="_blank" rel="noopener">FRP</a>
-          </div>
-          <div class="glosario-def">
-            Fire Radiative Power. Potencia radiativa del fuego expresada en megawatts (MW), medida por MODIS. Indica la intensidad energética de un incendio, no su extensión superficial. El auditor multicapa reporta el valor máximo detectado dentro del área del píxel.
-          </div>
-          </div>
+            <div class="glosario-term">
+              <a href="https://www.earthdata.nasa.gov/learn/find-data/near-real-time/firms/about-firms" target="_blank" rel="noopener">Confidence</a>
+            </div>
+            <div class="glosario-def">
+              Nivel de confianza (0–100) asignado por el algoritmo de MODIS a cada detección de fuego. Refleja la probabilidad de que el punto sea un incendio real y no una superficie caliente por otra causa (techo metálico, suelo árido, gas flaring). LUCIDA filtra detecciones con valor inferior a 30 para excluir falsas alarmas.
+            </div>
+          </div> <!-- AQUÍ ESTABA EL ERROR: Se cerró correctamente el item de Confidence -->
+
           <div class="glosario-item">
-          <div class="glosario-term">
-            <a href="https://eogdata.mines.edu/products/vnl/" target="_blank" rel="noopener">nW/cm²·sr</a>
-          </div>
-          <div class="glosario-def">
-            Nanowatts por centímetro cuadrado por estereorradián. Unidad física de radiancia utilizada por VIIRS: representa cuánta energía luminosa escapa hacia el espacio desde cada punto del territorio. Es la unidad base de todos los análisis de LUCIDA.
-          </div>
-          </div>
-          <div class="glosario-item">
-          <div class="glosario-term">
-            <a href="https://www.earthdata.nasa.gov/learn/find-data/near-real-time/firms/about-firms" target="_blank" rel="noopener">Confidence</a>
-          </div>
-          <div class="glosario-def">
-            Nivel de confianza (0–100) asignado por el algoritmo de MODIS a cada detección de fuego. Refleja la probabilidad de que el punto sea un incendio real y no una superficie caliente por otra causa (techo metálico, suelo árido, gas flaring). LUCIDA filtra detecciones con valor inferior a 30 para excluir falsas alarmas.
-          </div>
+            <div class="glosario-term">
+              <a href="https://www.gub.uy/instituto-nacional-estadistica/censos2023pvh" target="_blank" rel="noopener">INE Censo 2023</a>
+            </div>
+            <div class="glosario-def">
+              Censo Nacional de Población, Hogares y Viviendas 2023 del Instituto Nacional de Estadística de Uruguay. LUCIDA utiliza sus datos por sección censal (236 unidades en todo el país) para calcular la densidad poblacional en hab/km².
+            </div>
           </div>
 
         
