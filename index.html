@@ -46,7 +46,7 @@
       --sans:        'Inter', sans-serif;
       --display:     'Space Grotesk', sans-serif;
       --radius:      14px;
-      --sidebar:     320px;
+      --sidebar:     340px;
     }
  
     html { scroll-behavior: smooth; font-size: 22px; }
@@ -267,6 +267,19 @@
  
     .tele-mini-value.amber { color: var(--amber); }
     .tele-mini-value.green { color: var(--green); }
+ 
+    .tele-mini-item.contact { grid-column: 1 / -1; }
+    .tele-mini-item.contact a {
+      display: inline;
+      padding: 0;
+      background: none;
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--star);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .tele-mini-item.contact a:hover { text-decoration: underline; background: none; }
  
     /* ══ CONTENIDO PRINCIPAL Y AJUSTES DESPLEGABLES ══════════════════ */
     .content {
@@ -1239,6 +1252,10 @@
         <div class="tele-mini-item">
           <span class="tele-mini-label">Unidad</span>
           <span class="tele-mini-value green">nW/cm²·sr</span>
+        </div>
+        <div class="tele-mini-item contact">
+          <span class="tele-mini-label">Contacto:</span>
+          <a href="mailto:visualizadorlucida@gmail.com">visualizadorlucida@gmail.com</a>
         </div>
       </div>
     </div>
